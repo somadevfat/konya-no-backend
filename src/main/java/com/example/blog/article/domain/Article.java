@@ -1,4 +1,4 @@
-package com.example.simple_spring_rest_api.domain;
+package com.example.blog.article.domain;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;

@@ -1,8 +1,8 @@
-package com.example.simple_spring_rest_api.repository;
+package com.example.blog.article.infrastructure;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import com.example.simple_spring_rest_api.domain.Article;
+import com.example.blog.article.domain.Article;
 
 public interface ArticleRepository extends JpaRepository<Article, Long> {
 

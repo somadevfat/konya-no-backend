@@ -1,4 +1,4 @@
-package com.example.simple_spring_rest_api;
+package com.example.blog;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
