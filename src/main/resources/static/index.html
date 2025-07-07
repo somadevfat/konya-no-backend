@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<!-- Webページの基本的な設定を行うセクション -->
+
+<head>
+    <!-- 文字コードをUTF-8に設定し、文字化けを防ぐ -->
+    <meta charset="UTF-8">
+    <!-- ブラウザのタブに表示されるページのタイトル -->
+    <title>Simple Blog</title>
+</head>
+
+<!-- 実際にブラウザに表示されるコンテンツを記述するセクション -->
+
+<body>
+    <!-- ページのメインタイトル -->
+    <h1>Simple Blog</h1>
+    <a href="/about.html">このサイトについて</a>
+
+    <!-- 記事を投稿するためのセクション -->
+    <h2>記事投稿</h2>
+    <!-- フォーム。ID `add-article-form` を持つ -->
+    <form id="add-article-form">
+        <!-- 記事のタイトルを入力するテキストフィールド。IDは `title`。入力必須(`required`) -->
+        <input type="text" id="title" placeholder="タイトル" required><br>
+        <!-- 記事の内容を入力するテキストエリア。IDは `content`。入力必須(`required`) -->
+        <textarea id="content" placeholder="内容" required></textarea><br>
+        <!-- フォームの内容をサーバーに送信（投稿）するためのボタン -->
+        <button type="submit">投稿</button>
+    </form>
+
+    <!-- 投稿された記事の一覧を表示するセクション -->
+    <h2>記事一覧</h2>
+    <!-- 記事がリスト形式で表示される場所。IDは `article-list`。最初は空っぽ -->
+    <ul id="article-list"></ul>
+
+    <!-- 外部のJavaScriptファイル `script.js` を読み込む。ページの動作はここで定義 -->
+    <script src="script.js"></script>
+</body>
+
+</html>
