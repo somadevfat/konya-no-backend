@@ -33,6 +33,7 @@
 - 記事の作成、読み取り、更新、削除（CRUD）
 - REST APIとして提供
 - JSON形式でのデータ交換
+- ユーザー認証機能（記事の作成・更新・削除に必要）
 ```
 
 ### **1.2 機能一覧の作成**
@@ -41,18 +42,34 @@
 - [ ] 記事の新規作成
 - [ ] 記事の更新
 - [ ] 記事の削除
+- [ ] ユーザーのログイン
 
 ### **1.3 非機能要件**
 - [ ] レスポンス時間: 1秒以内
 - [ ] 同時接続数: 100ユーザー
-- [ ] データの永続化
+- [ ] データの永続化 (MySQL)
 - [ ] 適切なエラーハンドリング
+- [ ] パスワードのハッシュ化 (Bcrypt)
 
 ---
 
 ## 🗄️ **Phase 2: データベース設計 (45分)**
 
-### **2.1 エンティティの特定**
+### **2.1 データベース・ユーザー作成 (MySQL)**
+このアプリケーションではMySQLを使用します。まず、データベースと専用のユーザーを作成します。
+MySQLにログインし、以下のコマンドを実行してください。
+
+```sql
+-- データベースの作成
+CREATE DATABASE simple_rest_api_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- ユーザーの作成と権限付与
+CREATE USER 'java_user'@'localhost' IDENTIFIED BY 'password';
+GRANT ALL PRIVILEGES ON simple_rest_api_db.* TO 'java_user'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+### **2.2 エンティティの特定**
 ```
 主要エンティティ: Article（記事）
 
@@ -64,7 +81,7 @@
 - updated_at: 更新日時
 ```
 
-### **2.2 テーブル設計**
+### **2.3 テーブル設計**
 ```sql
 -- articlesテーブルの設計
 CREATE TABLE articles (
@@ -74,21 +91,49 @@ CREATE TABLE articles (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS articles (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
 ```
 
-### **2.3 制約の設定**
+### **2.4 制約の設定**
 - **主キー**: id（自動採番）
 - **NOT NULL制約**: title, content
 - **文字数制限**: title（255文字）
 - **インデックス**: 必要に応じて作成日時
 
 ### **2.4 初期データの準備**
+`src/main/resources/data.sql`
 ```sql
--- 初期データ
+-- 初期データ (実行のたびにクリアして再作成)
+DELETE FROM articles;
+ALTER TABLE articles AUTO_INCREMENT = 1;
 INSERT INTO articles (title, content) VALUES 
 ('はじめての記事', 'これは最初の記事です。'),
 ('Spring Boot学習', 'Spring Bootの基本を学んでいます。'),
 ('生JDBC実装', 'JPAを使わずに生JDBCで実装してみました。');
+
+-- ユーザーデータ (実行のたびにクリアして再作成)
+DELETE FROM users;
+ALTER TABLE users AUTO_INCREMENT = 1;
+-- ユーザー名: user, パスワード: password
+-- パスワードはBcryptでハッシュ化された値
+INSERT INTO users (username, password, role) VALUES
+('user', '$2a$10$g.f9.1w./iFXRk2O2/I.W.idX.a.3jV5K8JALz5aN1zE7qCNpGywS', 'ROLE_USER');
 ```
 
 ---
@@ -127,8 +172,13 @@ DELETE /api/articles/{id} - 記事削除
 - **201 Created**: 作成成功
 - **204 No Content**: 削除成功
 - **400 Bad Request**: 入力エラー
+- **401 Unauthorized**: 認証エラー
 - **404 Not Found**: リソースが見つからない
 - **500 Internal Server Error**: サーバーエラー
+
+### **3.4 認証・認可**
+- **記事の取得 (GET)**: 認証不要。誰でもアクセス可能。
+- **記事の作成・更新・削除 (POST, PUT, DELETE)**: **Basic認証**による認証が必要。
 
 ---
 
@@ -139,27 +189,127 @@ DELETE /api/articles/{id} - 記事削除
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
-    runtimeOnly 'com.h2database:h2'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    runtimeOnly 'com.mysql:mysql-connector-j:8.0.33'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
 }
 ```
 
 ### **4.2 application.properties設定**
+`src/main/resources/application.properties`
 ```properties
-# H2データベース設定
-spring.datasource.url=jdbc:h2:mem:testdb
-spring.datasource.driverClassName=org.h2.Driver
-spring.datasource.username=sa
-spring.datasource.password=
+# MySQL Database settings
+spring.datasource.url=jdbc:mysql://localhost:3306/simple_rest_api_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Tokyo
+spring.datasource.username=java_user
+spring.datasource.password=password
+spring.datasource.driverClassName=com.mysql.cj.jdbc.Driver
 
-# H2コンソール有効化
-spring.h2.console.enabled=true
-spring.h2.console.path=/h2-console
+# JPA/Hibernate settings (Not used in pure JDBC, but good practice to specify)
+spring.jpa.hibernate.ddl-auto=none
+
+# Initialize Schema and Data
+# アプリケーション起動時にschema.sqlとdata.sqlを実行する
+spring.sql.init.mode=always
 
 # ログ設定
 logging.level.org.springframework.jdbc=DEBUG
 ```
+
+### **4.3 CORS設定**
+
+アプリケーションを異なるドメインのフロントエンドから利用できるようにするため、CORS設定を追加します。
+
+#### **設計のポイント**
+- `WebMvcConfigurer` を実装した設定クラスを作成
+- `addCorsMappings` メソッドでCORSルールを定義
+- 特定のドメインからのリクエストを許可
+
+`src/main/java/com/example/simple_spring_rest_api/config/WebConfig.java`
+```java
+package com.example.simple_spring_rest_api.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/**")
+            .allowedOrigins("http://fanda-dev.com", "https://fanda-dev.com") // デプロイ先のドメイン
+            .allowedMethods("GET", "POST", "PUT", "DELETE")
+            .allowedHeaders("*")
+            .allowCredentials(true);
+    }
+}
+```
+
+### **4.4 セキュリティ設定**
+
+Spring Securityを導入し、APIに認証・認可機能を追加します。
+
+#### **設計のポイント**
+- `spring-boot-starter-security` を利用
+- `SecurityFilterChain` Beanでセキュリティルールを定義
+- エンドポイントごとにアクセス権限を設定
+- Basic認証とインメモリユーザーで簡易的な認証を実現
+
+#### **1. 依存関係の追加**
+`build.gradle`に以下を追加します。
+```gradle
+implementation 'org.springframework.boot:spring-boot-starter-security'
+```
+
+#### **2. セキュリティ設定クラスの作成**
+`src/main/java/com/example/simple_spring_rest_api/config/SecurityConfig.java`
+```java
+package com.example.simple_spring_rest_api.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(authorize -> authorize
+                        // 記事の取得(GET)は誰でも許可
+                        .requestMatchers(HttpMethod.GET, "/api/articles/**").permitAll()
+                        // 記事の作成・更新・削除は認証が必要
+                        .requestMatchers("/api/articles/**").authenticated()
+                        // その他のリクエストはすべて許可 (H2コンソールやSwagger UIなど)
+                        .anyRequest().permitAll()
+                )
+                .httpBasic(Customizer.withDefaults()); // Basic認証を有効化
+        return http.build();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        // BCryptアルゴリズムを使用してパスワードをハッシュ化
+        return new BCryptPasswordEncoder();
+    }
+}
+```
+> **解説:** 以前はここに`UserDetailsService`のBeanがありましたが、それを削除しました。`UserDetailsServiceImpl`クラスに`@Service`アノテーションを付けたことで、Springが自動的にそれを`UserDetailsService`の実装として認識し、利用してくれます。これにより、認証の仕組みがメモリ上からデータベースに切り替わりました。
 
 ---
 
@@ -174,6 +324,7 @@ logging.level.org.springframework.jdbc=DEBUG
 - ゲッター・セッター手動実装
 - toString, equals, hashCode実装
 
+`src/main/java/com/example/simple_spring_rest_api/domain/Article.java`
 ```java
 /**
  * 記事を表すドメインクラス
@@ -186,13 +337,15 @@ public class Article {
     private LocalDateTime updatedAt;
     
     // コンストラクタ（3種類）
-    public Article() {}
+    public Article() {} // デフォルトコンストラクタ
     
+    // 新規作成時に使用するコンストラクタ
     public Article(String title, String content) {
         this.title = title;
         this.content = content;
     }
     
+    // データベースから読み込む際に使用するコンストラクタ
     public Article(Long id, String title, String content, 
                    LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
@@ -202,62 +355,177 @@ public class Article {
         this.updatedAt = updatedAt;
     }
     
-    // ゲッター・セッター（全フィールド）
-    // toString, equals, hashCode
+    // ゲッター・セッター、toString, equals, hashCode は省略
 }
 ```
 
-### **5.2 データアクセス層実装 (60分)**
+### **5.2 ユーザー管理クラス作成**
+記事のCRUD実装と同様に、ユーザー情報を扱うための`Domain`, `Repository`を作成します。さらに、Spring SecurityがDB認証を行うための`Service`も作成します。
+
+#### **1. Userドメインクラス**
+`users`テーブルのレコードを表すクラスです。
+`src/main/java/com/example/simple_spring_rest_api/domain/User.java`
+```java
+public class User {
+    private Long id;
+    private String username;
+    private String password;
+    private String role;
+    // getter, setter...
+}
+```
+
+#### **2. UserRepository**
+ユーザー名(`username`)をキーに、データベースからユーザー情報を取得するリポジトリです。
+`src/main/java/com/example/simple_spring_rest_api/repository/UserRepository.java`
+```java
+@Repository
+public class UserRepository {
+    private final DataSource dataSource;
+    
+    public Optional<User> findByUsername(String username) {
+        String sql = "SELECT * FROM users WHERE username = ?";
+        // ... PreparedStatementを使った実装 ...
+    }
+
+    private User mapResultSetToUser(ResultSet rs) throws SQLException {
+        // ... ResultSetからUserオブジェクトへの変換処理 ...
+    }
+}
+```
+
+#### **3. UserDetailsServiceImpl**
+Spring Securityの`UserDetailsService`インターフェースを実装したクラスです。このクラスが、認証処理の核となります。
+`loadUserByUsername`メソッドが、ログイン時に入力されたユーザー名で`UserRepository`を呼び出し、DBから取得したユーザー情報をSpring Securityが扱える`UserDetails`形式に変換して返します。
+
+`src/main/java/com/example/simple_spring_rest_api/service/UserDetailsServiceImpl.java`
+```java
+@Service
+public class UserDetailsServiceImpl implements UserDetailsService {
+
+    private final UserRepository userRepository;
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("ユーザーが見つかりません: " + username));
+
+        List<GrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority(user.getRole()));
+
+        return new org.springframework.security.core.userdetails.User(
+                user.getUsername(),
+                user.getPassword(),
+                authorities
+        );
+    }
+}
+```
+
+### **5.3 データアクセス層実装 (ArticleRepository)**
 
 #### **設計のポイント**
-- 生JDBC使用
-- try-with-resources活用
-- SQLインジェクション対策
-- 適切な例外処理
-- ResultSetからオブジェクトへのマッピング
+- 生JDBC(`DataSource`, `Connection`, `PreparedStatement`, `ResultSet`)を使用
+- `try-with-resources`文でリソースを自動的にクローズし、接続リークを防止
+- SQLインジェクション対策として`PreparedStatement`のプレースホルダ(`?`)を利用
+- `ResultSet`から`Article`オブジェクトへの変換ロジックを`mapResultSetToArticle`メソッドに集約し、コードの重複を削減
+- データベース操作でエラーが発生した場合は、`RuntimeException`をスローして上位層に通知
 
+`src/main/java/com/example/simple_spring_rest_api/repository/ArticleRepository.java`
 ```java
 @Repository
 public class ArticleRepository {
     private final DataSource dataSource;
     
-    // CRUD操作の実装
-    public List<Article> findAll() {
-        String sql = "SELECT id, title, content, created_at, updated_at FROM articles ORDER BY id";
-        // 実装詳細...
-    }
+    // 全記事取得
+    public List<Article> findAll() { /* ... 実装 ... */ }
     
-    public Optional<Article> findById(Long id) {
-        String sql = "SELECT id, title, content, created_at, updated_at FROM articles WHERE id = ?";
-        // 実装詳細...
-    }
+    // IDで記事取得
+    public Optional<Article> findById(Long id) { /* ... 実装 ... */ }
     
+    // 記事の保存（新規作成）
     public Article save(Article article) {
         String sql = "INSERT INTO articles (title, content, created_at, updated_at) VALUES (?, ?, ?, ?)";
-        // 実装詳細...
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            
+            LocalDateTime now = LocalDateTime.now();
+            statement.setString(1, article.getTitle());
+            statement.setString(2, article.getContent());
+            statement.setTimestamp(3, Timestamp.valueOf(now));
+            statement.setTimestamp(4, Timestamp.valueOf(now));
+            
+            statement.executeUpdate();
+            
+            // 自動生成されたIDを取得してセット
+            try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    article.setId(generatedKeys.getLong(1));
+                    article.setCreatedAt(now);
+                    article.setUpdatedAt(now);
+                }
+            }
+            return article;
+        } catch (SQLException e) {
+            throw new RuntimeException("記事の保存に失敗しました", e);
+        }
     }
     
-    // update, deleteById メソッド
-    // mapResultSetToArticle ヘルパーメソッド
+    // 記事の更新
+    public Article update(Long id, Article article) {
+        String sql = "UPDATE articles SET title = ?, content = ?, updated_at = ? WHERE id = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, article.getTitle());
+            statement.setString(2, article.getContent());
+            statement.setTimestamp(3, Timestamp.valueOf(LocalDateTime.now()));
+            statement.setLong(4, id);
+            statement.executeUpdate();
+            return findById(id).orElse(null); // 更新後のデータを返す
+        } catch (SQLException e) {
+            throw new RuntimeException("記事の更新に失敗しました", e);
+        }
+    }
+
+    // 記事の削除
+    public void deleteById(Long id) {
+        String sql = "DELETE FROM articles WHERE id = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, id);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("記事の削除に失敗しました", e);
+        }
+    }
+    
+    // ResultSetからArticleへのマッピングを行うヘルパーメソッド
+    private Article mapResultSetToArticle(ResultSet resultSet) throws SQLException {
+        return new Article(
+            resultSet.getLong("id"),
+            resultSet.getString("title"),
+            resultSet.getString("content"),
+            resultSet.getTimestamp("created_at").toLocalDateTime(),
+            resultSet.getTimestamp("updated_at").toLocalDateTime()
+        );
+    }
 }
 ```
 
-### **5.3 ビジネスロジック層実装 (30分)**
+### **5.4 ビジネスロジック層実装 (30分)**
 
 #### **設計のポイント**
-- 入力値検証
-- ビジネスルール実装
-- 適切な例外処理
-- トランザクション境界
+- `Controller`層と`Repository`層の間に立ち、ビジネスルールを実装
+- 入力値の検証（バリデーション）を行い、不正なデータでの処理を防ぐ
+- `Repository`を呼び出してデータの永続化を指示
+- 更新や削除の前に、対象のデータが存在するかを`findArticleById`で確認し、存在しない場合は例外をスロー（防衛的プログラミング）
 
+`src/main/java/com/example/simple_spring_rest_api/service/ArticleService.java`
 ```java
 @Service
 public class ArticleService {
     private final ArticleRepository articleRepository;
     
-    public List<Article> findAllArticles() {
-        return articleRepository.findAll();
-    }
+    public List<Article> findAllArticles() { /* ... 実装 ... */ }
     
     public Article findArticleById(Long id) {
         return articleRepository.findById(id)
@@ -265,40 +533,100 @@ public class ArticleService {
     }
     
     public Article createArticle(Article article) {
-        // 入力値検証
-        validateArticle(article);
+        validateArticle(article); // 入力値検証
         return articleRepository.save(article);
     }
     
-    // 他のメソッド + バリデーションロジック
+    public Article updateArticle(Long id, Article articleDetails) {
+        findArticleById(id); // 存在確認
+        validateArticle(articleDetails); // 入力値検証
+        return articleRepository.update(id, articleDetails);
+    }
+
+    public void deleteArticle(Long id) {
+        findArticleById(id); // 存在確認
+        articleRepository.deleteById(id);
+    }
+
+    // タイトルと内容が空でないことを確認するヘルパーメソッド
+    private void validateArticle(Article article) {
+        if (article.getTitle() == null || article.getTitle().trim().isEmpty()) {
+            throw new IllegalArgumentException("タイトルは必須です");
+        }
+        if (article.getContent() == null || article.getContent().trim().isEmpty()) {
+            throw new IllegalArgumentException("内容は必須です");
+        }
+    }
 }
 ```
 
-### **5.4 プレゼンテーション層実装 (45分)**
+### **5.5 プレゼンテーション層実装 (45分)**
 
 #### **設計のポイント**
-- RESTfulなエンドポイント
-- 適切なHTTPステータスコード
-- エラーハンドリング
-- JSON変換
+- `@RestController`でクラスがRESTfulなエンドポイントであることを示す
+- `@RequestMapping`でURLのベースパスを設定
+- `@GetMapping`, `@PostMapping`, `@PutMapping`, `@DeleteMapping`で各HTTPメソッドに対応する処理をマッピング
+- `@PathVariable`でURLパスからIDを取得、`@RequestBody`でリクエストボディのJSONを`Article`オブジェクトに変換
+- `Service`層からスローされた例外を`try-catch`で捕捉し、`ResponseEntity`を使って適切なHTTPステータスコード（200, 201, 204, 400, 404など）とレスポンスボディを返す
 
+`src/main/java/com/example/simple_spring_rest_api/controller/ArticleController.java`
 ```java
 @RestController
 @RequestMapping("/api/articles")
 public class ArticleController {
     private final ArticleService articleService;
     
+    // GET /api/articles
     @GetMapping
-    public ResponseEntity<List<Article>> getAllArticles() {
+    public ResponseEntity<List<Article>> getAllArticles() { /* ... 実装 ... */ }
+    
+    // GET /api/articles/{id}
+    @GetMapping("/{id}")
+    public ResponseEntity<Article> getArticleById(@PathVariable Long id) {
         try {
-            List<Article> articles = articleService.findAllArticles();
-            return ResponseEntity.ok(articles);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            Article article = articleService.findArticleById(id);
+            return ResponseEntity.ok(article);
+        } catch (RuntimeException e) {
+            // Serviceでスローされた例外をキャッチし、404 Not Foundを返す
+            return ResponseEntity.notFound().build();
         }
     }
     
-    // 他のエンドポイント実装
+    // POST /api/articles
+    @PostMapping
+    public ResponseEntity<Article> createArticle(@RequestBody Article article) {
+        try {
+            Article createdArticle = articleService.createArticle(article);
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdArticle);
+        } catch (IllegalArgumentException e) {
+            // Serviceの入力値検証でスローされた例外をキャッチし、400 Bad Requestを返す
+            return ResponseEntity.badRequest().build();
+        }
+    }
+    
+    // PUT /api/articles/{id}
+    @PutMapping("/{id}")
+    public ResponseEntity<Article> updateArticle(@PathVariable Long id, @RequestBody Article articleDetails) {
+        try {
+            Article updatedArticle = articleService.updateArticle(id, articleDetails);
+            return ResponseEntity.ok(updatedArticle);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    // DELETE /api/articles/{id}
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteArticle(@PathVariable Long id) {
+        try {
+            articleService.deleteArticle(id);
+            return ResponseEntity.noContent().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
 }
 ```
 
@@ -314,9 +642,18 @@ public class ArticleController {
 # 基本動作確認
 curl -X GET http://localhost:8080/api/articles
 curl -X GET http://localhost:8080/api/articles/1
+
+# 記事作成 (認証あり)
+# -u user:password でBasic認証の認証情報を付与
 curl -X POST http://localhost:8080/api/articles \
+  -u user:password \
   -H "Content-Type: application/json" \
   -d '{"title":"テスト記事","content":"テスト内容"}'
+
+# 記事作成 (認証なし、エラーになることを確認)
+curl -X POST http://localhost:8080/api/articles \
+  -H "Content-Type: application/json" \
+  -d '{"title":"テスト記事","content":"テスト内容"}' -i
 ```
 
 ### **6.2 Swagger UI確認**
@@ -324,9 +661,13 @@ curl -X POST http://localhost:8080/api/articles \
 http://localhost:8080/swagger-ui/index.html
 ```
 
-### **6.3 H2コンソール確認**
-```
-http://localhost:8080/h2-console
+### **6.3 MySQLでのデータ確認**
+ターミナルからMySQLにログインし、データが正しく保存されているか確認します。
+```bash
+mysql -u java_user -p simple_rest_api_db
+
+-- ログイン後
+SELECT * FROM articles;
 ```
 
 ---
