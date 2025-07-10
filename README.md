@@ -1,105 +1,168 @@
-# konya-no-backend
+# Simple Spring REST API
 
-## プロジェクト概要
-簡易的な記事管理 REST API です。Spring Boot 3 と MySQL を用いて、記事 (Article) エンティティの CRUD 操作が出来ます。社内テック面接やポートフォリオとして「最低限動くバックエンド」を示すことを目的に、理解しやすい構成にしています。
+> **⚠️ 学習中のプロジェクトです**  
+> このプロジェクトは、Spring Boot・REST API・セキュリティの学習を目的として作成しています。  
+> 現在も継続的に機能追加・改善を行っています。
 
-## 目標レベル
-Java Silver 程度の知識で読み解けるコードとドキュメントを意識しています。難解な設計は避け、標準的・王道な Spring の使い方に寄せています。
+## 📋 プロジェクト概要
 
----
+記事管理システムのREST APIです。Spring Bootを使用して、基本的なCRUD操作とユーザー認証機能を実装しています。
 
-## 主な技術スタック
-| 分類 | 使用ライブラリ / ツール | 補足 |
-|------|------------------------|------|
-| 言語 | Java 17 | LTS バージョン |
-| フレームワーク | Spring Boot 3.5 | 軽量な設定で即稼働 |
-| DB アクセス | Spring Data JPA | ORM ＆ Repository パターン |
-| データベース | MySQL 8.0 | Docker 例を後述 |
-| ビルド | Gradle (Wrapper 同梱) | `./gradlew` 一発実行 |
-| その他 | Lombok / springdoc-openapi | ボイラープレート削減 / API ドキュメント生成 |
+### 🎯 学習目標
+- Spring Bootの基本的な使い方
+- REST APIの設計・実装
+- Spring Securityによる認証・認可
+- 生JDBCを使用したデータベース操作
+- API仕様書の自動生成（Swagger UI）
 
----
+## 🛠️ 技術スタック
 
-## アーキテクチャ図 (超シンプル)
-```text
-Controller  →  Service  →  Repository  →  MySQL
-        (HTTP)          (Domain)      (Spring Data JPA)
+- **Java 17**
+- **Spring Boot 3.5.3**
+- **Spring Security** - 認証・認可
+- **Spring JDBC** - データベース操作（生JDBC）
+- **MySQL** - データベース
+- **Swagger UI** - API仕様書
+- **BCrypt** - パスワードハッシュ化
+- **Gradle** - ビルドツール
+
+## 🚀 機能
+
+### 記事管理API
+- ✅ 記事一覧取得（認証不要）
+- ✅ 記事詳細取得（認証不要）
+- ✅ 記事作成（認証必要）
+- ✅ 記事更新（認証必要）
+- ✅ 記事削除（認証必要）
+
+### セキュリティ機能
+- ✅ Basic認証
+- ✅ BCryptによるパスワードハッシュ化
+- ✅ データベースベースのユーザー管理
+- ✅ CORS設定
+
+## 📊 API仕様
+
+### エンドポイント一覧
+
+| メソッド | エンドポイント | 説明 | 認証 |
+|---------|---------------|------|------|
+| GET | `/api/articles` | 記事一覧取得 | 不要 |
+| GET | `/api/articles/{id}` | 記事詳細取得 | 不要 |
+| POST | `/api/articles` | 記事作成 | 必要 |
+| PUT | `/api/articles/{id}` | 記事更新 | 必要 |
+| DELETE | `/api/articles/{id}` | 記事削除 | 必要 |
+
+### データ形式
+
+```json
+{
+  "id": 1,
+  "title": "記事タイトル",
+  "content": "記事の内容",
+  "createdAt": "2025-01-01T00:00:00",
+  "updatedAt": "2025-01-01T00:00:00"
+}
 ```
-- **Controller**: ルーティングとリクエスト/レスポンス変換のみ
-- **Service**: ビジネスロジック (今回は薄め。拡張用のレイヤー)
-- **Repository**: DB とのやり取りを Spring Data JPA に委譲
-- **Domain**: JPA エンティティ (Article)
 
----
+## 🏃‍♂️ 実行方法
 
-## API 一覧
-| メソッド | パス | 説明 |
-|----------|------|------|
-| GET | `/api/articles` | 記事をすべて取得 |
-| POST | `/api/articles` | 新規記事を作成 |
-| PUT | `/api/articles/{id}` | 既存記事を更新 |
-| DELETE | `/api/articles/{id}` | 記事を削除 |
+### 1. 前提条件
+- Java 17以上
+- MySQL 8.0以上
 
-Swagger UI で動作確認できます:  
-`http://localhost:8080/swagger-ui/index.html`
+### 2. データベースセットアップ
+```sql
+CREATE DATABASE simple_spring_rest_api;
+```
 
----
+### 3. アプリケーション設定
+`src/main/resources/application.properties` でデータベース接続情報を設定：
 
-## セットアップ手順
-1. **前提ソフト**  
-   - Java 17+  
-   - MySQL (ローカル or Docker)
+```properties
+spring.datasource.url=jdbc:mysql://localhost:3306/simple_spring_rest_api
+spring.datasource.username=your_username
+spring.datasource.password=your_password
+```
 
-2. **データベースを用意** (Docker 例)  
-   ```bash
-   docker run -d --name mysql8 \
-     -e MYSQL_ROOT_PASSWORD=root \
-     -e MYSQL_DATABASE=sample \
-     -p 3306:3306 mysql:8
-   ```
-
-3. **環境変数を設定**  
-   ```bash
-   export DB_URL=jdbc:mysql://localhost:3306/sample
-   export DB_USER=root
-   export DB_PASSWORD=root
-   ```
-
-4. **アプリを起動**  
-   ```bash
-   ./gradlew bootRun
-   ```
-   `GET /api/articles` が 200 OK になれば成功です。
-
-### ビルド & テスト
+### 4. アプリケーション起動
 ```bash
-./gradlew clean build      # JAR 作成
-./gradlew test             # JUnit テスト (Spring Context 起動確認)
+./gradlew bootRun
 ```
-生成物: `build/libs/simple-spring-rest-api-0.0.1-SNAPSHOT.jar`
+
+アプリケーションは `http://localhost:8080` で起動します。
+
+## 🧪 API テスト方法
+
+### Swagger UIを使用（推奨）
+
+1. アプリケーション起動後、ブラウザで以下にアクセス：
+   ```
+   http://localhost:8080/swagger-ui.html
+   ```
+
+2. **認証が必要なエンドポイントのテスト**：
+   - 「Authorize」ボタンをクリック
+   - ユーザー名: `admin`、パスワード: `password` を入力
+   - 「Authorize」で認証完了
+
+3. **各エンドポイントのテスト**：
+   - 試したいエンドポイントをクリック
+   - 「Try it out」ボタンをクリック
+   - 必要な場合はリクエストボディを入力
+   - 「Execute」でリクエスト実行
+
+### cURLを使用
+
+```bash
+# 記事一覧取得（認証不要）
+curl -X GET http://localhost:8080/api/articles
+
+# 記事作成（認証必要）
+curl -X POST http://localhost:8080/api/articles \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{"title":"テスト記事","content":"これはテスト記事です"}'
+
+# 記事詳細取得（認証不要）
+curl -X GET http://localhost:8080/api/articles/1
+```
+
+## 🗂️ プロジェクト構成
+
+```
+src/main/java/com/example/simple_spring_rest_api/
+├── controller/          # REST APIエンドポイント
+├── service/            # ビジネスロジック
+├── repository/         # データアクセス層
+├── domain/            # エンティティクラス
+├── config/            # 設定クラス
+└── SimpleSpringRestApiApplication.java
+```
+
+## 📚 学習のポイント
+
+### 実装できたこと
+- ✅ 3層アーキテクチャ（Controller/Service/Repository）の理解と実装
+- ✅ Spring Securityの基本的な設定
+- ✅ 生JDBCを使用したデータベース操作
+- ✅ RESTful APIの設計原則に従った実装
+- ✅ Swagger UIによるAPI仕様書の自動生成
+
+### 今後の学習予定
+- 🔄 JPA/Hibernateの導入
+- 🔄 JWT認証の実装
+- 🔄 単体テスト・統合テストの追加
+- 🔄 Docker化
+- 🔄 CI/CD パイプラインの構築
+
+## 🔗 参考資料
+
+- [Spring Boot公式ドキュメント](https://spring.io/projects/spring-boot)
+- [Spring Security公式ドキュメント](https://spring.io/projects/spring-security)
+- [Swagger UI](https://swagger.io/tools/swagger-ui/)
 
 ---
 
-## よくある質問 (FAQ)
-<details>
-<summary>API ドキュメントはどう生成していますか？</summary>
-実行時に `springdoc-openapi-starter-webmvc-ui` が OpenAPI 仕様を自動生成します。追加設定は不要です。
-</details>
-
-<details>
-<summary>Repository に複雑なクエリが無い理由は？</summary>
-初学者が理解しやすいように CRUD のみ実装しています。高度な検索が必要になったら `@Query` や `Querydsl` を導入する予定です。
-</details>
-
----
-
-## 今後のロードマップ
-- 認証・認可 (Spring Security + JWT)
-- リクエストバリデーション (`@Valid`)
-- CI/CD (GitHub Actions) と Docker Compose での環境構築
-- Integration Test 充実 (Testcontainers)
-
----
-
-## ライセンス
-MIT
+**作成日**: 2025年7月10日  
+**最終更新**: 2025年7月10日
