@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # 1. MySQLデータベースサービスの定義
+  db:
+    image: mysql:8.0
+    container_name: konya-mysql
+    restart: always
+    # .envファイルからMYSQL_...変数が自動的に読み込まれる
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      # ホストの3306ポートをコンテナの3306ポートに接続
+      # これでローカルのDBツールから接続できるようになる
+      - '1111:3306'
+    volumes:
+      # DBのデータを永続化するための設定
+      # これがないとコンテナを止めるとデータが消える
+      - mysql-data:/var/lib/mysql
+
+  # 2. Spring Bootアプリケーションサービスの定義
+  app:
+    image: somadebufat/konya-no-app:latest
+    container_name: konya-app
+    # 同じディレクトリにある Dockerfile を使ってビルドする
+    build: .
+    restart: always
+    depends_on:
+      - db # dbサービスが起動してからappサービスを起動する
+    ports:
+      # ホストの8080ポートをコンテナの8080ポートに接続
+      - '2222:8080'
+    # .envファイルからSPRING_...変数が自動的に読み込まれる
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+
+volumes:
+  mysql-data: 
